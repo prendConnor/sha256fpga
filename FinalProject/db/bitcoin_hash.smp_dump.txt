@@ -1,0 +1,11 @@
+
+State Machine - |bitcoin_hash|state
+Name state.WAIT state.FINALIZE_HASH state.NEXT_48 state.FIRST_16 state.FIRST_READ state.PRIME_ADDR state.IDLE state.DONE 
+state.IDLE 0 0 0 0 0 0 0 0 
+state.PRIME_ADDR 0 0 0 0 0 1 1 0 
+state.FIRST_READ 0 0 0 0 1 0 1 0 
+state.FIRST_16 0 0 0 1 0 0 1 0 
+state.NEXT_48 0 0 1 0 0 0 1 0 
+state.FINALIZE_HASH 0 1 0 0 0 0 1 0 
+state.WAIT 1 0 0 0 0 0 1 0 
+state.DONE 0 0 0 0 0 0 1 1 

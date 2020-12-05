@@ -166,14 +166,6 @@ begin
     // HASH ROUNDS
 
     for (t = 0; t < 64; t++) begin
-			$display("this is a: %x", a);
-			$display("this is b: %x", b);
-			$display("this is c: %x", c);
-			$display("this is d: %x", d);
-			$display("this is e: %x", e);
-			$display("this is f: %x", f);
-			$display("this is g: %x", g);
-			$display("this is h: %x\n", h);
         {a, b, c, d, e, f, g, h} = sha256_op(a, b, c, d, e, f, g, h, w[t], t);
     end
 
@@ -190,7 +182,7 @@ begin
 
 // 2. COMPUTE SECOND BLOCK FOR FIRST HASH FOR EACH NONCE
 
-    /*for (n = 0; n < NUM_NONCES; n++) begin
+    for (n = 0; n < NUM_NONCES; n++) begin
 
         // WORD EXPANSION
 
@@ -307,7 +299,7 @@ begin
         h5[n] = h5[n] + f;
         h6[n] = h6[n] + g;
         h7[n] = h7[n] + h;
-    end*/
+    end
 
 // WAIT UNTIL EVERY IS DONE, THEN DISPLAY HASH RESULTS
 
