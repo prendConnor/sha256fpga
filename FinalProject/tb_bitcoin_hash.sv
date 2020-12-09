@@ -166,6 +166,9 @@ begin
     // HASH ROUNDS
 
     for (t = 0; t < 64; t++) begin
+			$display("this is t: %d", t);
+			$display("this is w[t]: %x", w[t]);
+			$display("this is w[14]: %x", w[14]);
 			$display("this is a: %x", a);
 			$display("this is b: %x", b);
 			$display("this is c: %x", c);
@@ -190,7 +193,7 @@ begin
 
 // 2. COMPUTE SECOND BLOCK FOR FIRST HASH FOR EACH NONCE
 
-    /*for (n = 0; n < NUM_NONCES; n++) begin
+    for (n = 0; n < NUM_NONCES; n++) begin
 
         // WORD EXPANSION
 
@@ -307,7 +310,7 @@ begin
         h5[n] = h5[n] + f;
         h6[n] = h6[n] + g;
         h7[n] = h7[n] + h;
-    end*/
+    end
 
 // WAIT UNTIL EVERY IS DONE, THEN DISPLAY HASH RESULTS
 

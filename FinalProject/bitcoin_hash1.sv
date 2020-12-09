@@ -35,9 +35,10 @@ logic	[31:0] h6[NUM_NONCES];
 logic	[31:0] h7[NUM_NONCES];
 
 logic	[6:0]	wIndex; 			// index for accessing word array
-logic	[7:0]	tIndex;					// index to track number of expand iters
+logic	[7:0]	tIndex;			// index to track number of expand iters
 logic	[6:0]	readOffset;		// value to track read addr offset
 logic	[6:0]	writeOffset;	// value to track write addr offset
+logic	[6:0] nonceIndex;
 logic	[31:0] w[16];			// 16 elelment word array
 logic	[4:0] i;					// index for for loop
 logic [31:0] w_15, w_14, w_13;
@@ -88,10 +89,11 @@ always @(posedge clk, negedge reset_n) begin
 
 	// when reset is high, reset Index values and initialize hashes to correct vals
 	if( !reset_n ) begin 
-		wIndex = 'b0;
-		tIndex = 'b0;
-		readOffset = 'b0;
-		writeOffset = 'b0;
+		//wIndex = 'b0;
+		tIndex = 8'b0;
+		readOffset = 7'b0;
+		writeOffset = 7'b0;
+		nonceIndex = 7'b0;
 		
 		fh0 = 32'h6a09e667;
 		fh1 = 32'hbb67ae85;
@@ -125,14 +127,14 @@ always @(posedge clk, negedge reset_n) begin
 			PRIME_ADDR: begin
 				mem_addr <= message_addr + readOffset;
 				w[15] <= mem_read_data;
-				readOffset <= readOffset + 'b1;
+				readOffset <= readOffset + 7'b1;
 				state <= FIRST_READ;
 			end
 			
 			FIRST_READ: begin
 				w[15] <= mem_read_data;
 				mem_addr <= message_addr + readOffset;
-				readOffset <= readOffset + 'b1;
+				readOffset <= readOffset + 7'b1;
 				state <= WAIT;
 			end
 			
@@ -141,22 +143,24 @@ always @(posedge clk, negedge reset_n) begin
 				w[15] <= mem_read_data;
 				for(i=0; i < 15; i++) w[i] <= w[i+1]; // doesnt match slides; moved before read line
 				mem_addr <= message_addr + readOffset;
-				readOffset <= readOffset + 'b1;
-				tIndex <= tIndex+1;
+				readOffset <= readOffset + 7'b1;
+				tIndex <= tIndex+8'b1;
 				
-				if(tIndex == 16)
+				if(tIndex == 15) begin
+					w[15] <= wtnew();
 					state <= NEXT_48; //next loop
+				end
 			end
 			
 			NEXT_48: begin
-				{a, b, c, d, e, f, g, h} = sha256_op(a, b, c, d, e, f, g, h, w[15], tIndex);
-				for(i=0; i < 15; i++) w[i] = w[i+1]; // doesnt match slides; moved before read line
-				w[15] = wtnew();
-				mem_addr = message_addr + readOffset;
-				readOffset = readOffset + 'b1;
-				tIndex = tIndex+1;
+				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, w[15], tIndex);
+				w[15] <= wtnew();
+				for(i=0; i < 15; i++) w[i] <= w[i+1]; // doesnt match slides; moved before read line
+				mem_addr <= message_addr + readOffset;
+				readOffset <= readOffset + 7'b1;
+				tIndex <= tIndex+8'b1;
 				
-				if( tIndex == 64 )
+				if( tIndex == 63 )
 					state <= FINALIZE_HASH;
 			
 			end
@@ -164,7 +168,7 @@ always @(posedge clk, negedge reset_n) begin
 			WAIT: begin
 				w[15] <= mem_read_data;
 				mem_addr <= message_addr + readOffset;
-				readOffset <= readOffset + 'b1;
+				readOffset <= readOffset + 7'b1;
 				state <= FIRST_16;
 			end
 			
@@ -177,7 +181,12 @@ always @(posedge clk, negedge reset_n) begin
 				fh5 <= fh5 + f;
 				fh6 <= fh6 + g;
 				fh7 <= fh7 + h;
-				state <= DONE;
+				state <= BEFORE_NONCE;
+			end
+			
+			BEFORE_NONCE: begin
+			
+			
 			end
 			
 			DONE: begin
