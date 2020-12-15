@@ -38,7 +38,8 @@ logic	[6:0]	wIndex; 			// index for accessing word array
 logic	[7:0]	tIndex;			// index to track number of expand iters
 logic	[6:0]	readOffset;		// value to track read addr offset
 logic	[6:0]	writeOffset;	// value to track write addr offset
-logic	[6:0] nonceIndex;
+logic	[6:0]	nonceIndex;		// which nonce are we on
+logic			b2Done;
 logic	[31:0] w[16];			// 16 elelment word array
 logic	[4:0] i;					// index for for loop
 logic [31:0] w_15, w_14, w_13;
@@ -50,9 +51,12 @@ assign w_13 = w[13];
 //logic   [31:0] s1, s0;
 
 //states
-enum logic [3:0] {IDLE=4'b0000, PRIME_ADDR=4'b0001, FIRST_READ=4'b0010, FIRST_16=4'b0011, 
-						NEXT_48=4'b0100, FINALIZE_HASH=4'b0101, WAIT=4'b0110, HASH=4'b0111, 
-						ADD=4'b1000, REPEAT=4'b1001, WRITE=4'b1010, DONE = 4'b1111} state;
+enum logic [4:0] {IDLE=5'b00000, PRIME_ADDR=5'b00001, FIRST_READ=5'b00010, FIRST_16=5'b00011, 
+						NEXT_48=5'b00100, FINALIZE_HASH=5'b00101, WAIT=5'b00110, BEFORE_NONCE=5'b00111, 
+						NONCE=5'b01000, AFTER_NONCE=5'b01001, WRITE=5'b01010, DONE = 5'b01111,
+						BLOCK2_INIT=5'b11111,BLOCK2_WORD_EXP=5'b10000,HASH2_INIT=5'b10001,HASH2_WORD_EXP=5'b10010} state;
+
+
 
 // SHA256 hash round
 function logic [255:0] sha256_op(input logic [31:0] a, b, c, d, e, f, g, h, w,
@@ -183,12 +187,69 @@ always @(posedge clk, negedge reset_n) begin
 				fh7 <= fh7 + h;
 				state <= BEFORE_NONCE;
 			end
-			
 			BEFORE_NONCE: begin
-			
+				nonceIndex <= 7'b0; // Don't forget its 7 bits lol
 			
 			end
+			NONCE: begin
+				if (b2Done) begin
+					state <= HASH2_INIT;
+				end	else begin
+					state <= BLOCK2_INIT;
+				end
+			end
+			BLOCK2_INIT: begin // Init 2nd block nonce calcs
+				
+				// Init hash
+				h0[n] = fh0;
+				h1[n] = fh1;
+				h2[n] = fh2;
+				h3[n] = fh3;
+				h4[n] = fh4;
+				h5[n] = fh5;
+				h6[n] = fh6;
+				h7[n] = fh7;
+
+				a = fh0;
+				b = fh1;
+				c = fh2;
+				d = fh3;
+				e = fh4;
+				f = fh5;
+				g = fh6;
+				h = fh7;
+			end
+			BLOCK2_WORD_EXP: begin // Block 2 word expansion
+				
+			end
+			HASH2_INIT: begin // Init 2nd hash nonce calcs
 			
+			end
+			HASH2_WORD_EXP: begin // 2nd hash word expansion
+				
+			end
+			AFTER_NONCE: begin
+				// final hash vals
+				h0[nonceIndex] <= h0[nonceIndex] + a;
+				h1[nonceIndex] <= h1[nonceIndex] + b;
+				h2[nonceIndex] <= h2[nonceIndex] + c;
+				h3[nonceIndex] <= h3[nonceIndex] + d;
+				h4[nonceIndex] <= h4[nonceIndex] + e;
+				h5[nonceIndex] <= h5[nonceIndex] + f;
+				h6[nonceIndex] <= h6[nonceIndex] + g;
+				h7[nonceIndex] <= h7[nonceIndex] + h;
+
+				nonceIndex <= nonceIndex+7'b1; 	// n++
+
+				if ( nonceIndex == 15 ) begin // is nonce loop done
+					if (!b2Done) begin
+						b2Done <= !b2Done;
+					end
+					else begin
+						state <= HO_WRITE; // TODO: Add H0_WRITE
+					end
+				end
+			end	
 			DONE: begin
 				done = 1'b1;
 			end
