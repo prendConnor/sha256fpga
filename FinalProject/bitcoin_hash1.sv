@@ -42,11 +42,28 @@ logic	[6:0]	nonceIndex;		// which nonce are we on
 logic			b2Done;
 logic	[31:0] w[16];			// 16 elelment word array
 logic	[4:0] i;					// index for for loop
-logic [31:0] w_15, w_14, w_13;
+logic [31:0] w_15, w_14, w_13, h0_naught, h0_one, h0_two, h0_3, h0_4, h0_5, h0_6, h0_7, h0_8, h0_9, h0_10;
+logic [31:0] h0_11, h0_12, h0_13, h0_14, h0_15;
 
 assign w_15 = w[15];
 assign w_14 = w[14];
 assign w_13 = w[13];
+assign h0_naught = h0[0];
+assign h0_one = h0[1];
+assign h0_two = h0[2];
+assign h0_3 = h0[3];
+assign h0_4 = h0[4];
+assign h0_5 = h0[5];
+assign h0_6 = h0[6];
+assign h0_7 = h0[7];
+assign h0_8 = h0[8];
+assign h0_9 = h0[9];
+assign h0_10 = h0[10];
+assign h0_11 = h0[11];
+assign h0_12 = h0[12];
+assign h0_13 = h0[13];
+assign h0_14 = h0[14];
+assign h0_15 = h0[15];
 
 //logic   [31:0] s1, s0;
 
@@ -54,7 +71,9 @@ assign w_13 = w[13];
 enum logic [4:0] {IDLE=5'b00000, PRIME_ADDR=5'b00001, FIRST_READ=5'b00010, FIRST_16=5'b00011, 
 						NEXT_48=5'b00100, FINALIZE_HASH=5'b00101, WAIT=5'b00110, BEFORE_NONCE=5'b00111, 
 						NONCE=5'b01000, AFTER_NONCE=5'b01001, WRITE=5'b01010, DONE = 5'b01111,
-						BLOCK2_INIT=5'b11111,BLOCK2_WORD_EXP=5'b10000,HASH2_INIT=5'b10001,HASH2_WORD_EXP=5'b10010} state;
+						BLOCK2_INIT=5'b11111,BLOCK2_WORD_EXP=5'b10000,HASH2_INIT=5'b10001,HASH2_WORD_EXP=5'b10010,
+						NONCE_BLOCK_2_WAIT=5'b10011, START_BLOCK_3=5'b10100, STALL_BLOCK_3=5'b10101, 
+						EXP_BLOCK_3=5'b10110, WAIT_BLOCK_3=5'b10111, HASH_BLOCK_3=5'b11000} state;
 
 
 
@@ -88,6 +107,7 @@ function logic [31:0] wtnew;
 	s1 = rrot(w[14],17)^rrot(w[14],19)^(w[14]>>10);
 	wtnew = w[0] + s0 + w[9] + s1;
 endfunction
+
 	
 always @(posedge clk, negedge reset_n) begin
 
@@ -95,6 +115,7 @@ always @(posedge clk, negedge reset_n) begin
 	if( !reset_n ) begin 
 		//wIndex = 'b0;
 		tIndex = 8'b0;
+		b2Done = 1'b0;
 		readOffset = 7'b0;
 		writeOffset = 7'b0;
 		nonceIndex = 7'b0;
@@ -164,8 +185,10 @@ always @(posedge clk, negedge reset_n) begin
 				readOffset <= readOffset + 7'b1;
 				tIndex <= tIndex+8'b1;
 				
-				if( tIndex == 63 )
+				if( tIndex == 63 ) begin
 					state <= FINALIZE_HASH;
+					readOffset <= 7'd16;
+				end
 			
 			end
 			
@@ -177,6 +200,10 @@ always @(posedge clk, negedge reset_n) begin
 			end
 			
 			FINALIZE_HASH: begin
+			
+				nonceIndex <= 7'b0; // Don't forget its 7 bits lol
+				tIndex <= 'b0;
+			
 				fh0 <= fh0 + a;
 				fh1 <= fh1 + b;
 				fh2 <= fh2 + c;
@@ -187,28 +214,35 @@ always @(posedge clk, negedge reset_n) begin
 				fh7 <= fh7 + h;
 				state <= BEFORE_NONCE;
 			end
-			BEFORE_NONCE: begin
-				nonceIndex <= 7'b0; // Don't forget its 7 bits lol
 			
+			BEFORE_NONCE: begin
+				mem_addr <= message_addr + readOffset;
+				state <= NONCE;
 			end
+			
 			NONCE: begin
-				if (b2Done) begin
-					state <= HASH2_INIT;
-				end	else begin
-					state <= BLOCK2_INIT;
-				end
+				w[15] <= mem_read_data;
+				mem_addr <= message_addr + readOffset;
+				readOffset = readOffset + 7'b1;
+				
+				state <= BLOCK2_INIT;
 			end
+			
 			BLOCK2_INIT: begin // Init 2nd block nonce calcs
+
+				w[15] <= mem_read_data;
+				mem_addr <= message_addr + readOffset;
+				readOffset = readOffset + 7'b1;
 				
 				// Init hash
-				h0[n] = fh0;
-				h1[n] = fh1;
-				h2[n] = fh2;
-				h3[n] = fh3;
-				h4[n] = fh4;
-				h5[n] = fh5;
-				h6[n] = fh6;
-				h7[n] = fh7;
+				h0[nonceIndex] = fh0;
+				h1[nonceIndex] = fh1;
+				h2[nonceIndex] = fh2;
+				h3[nonceIndex] = fh3;
+				h4[nonceIndex] = fh4;
+				h5[nonceIndex] = fh5;
+				h6[nonceIndex] = fh6;
+				h7[nonceIndex] = fh7;
 
 				a = fh0;
 				b = fh1;
@@ -218,16 +252,96 @@ always @(posedge clk, negedge reset_n) begin
 				f = fh5;
 				g = fh6;
 				h = fh7;
+				
+				state <= NONCE_BLOCK_2_WAIT;
 			end
-			BLOCK2_WORD_EXP: begin // Block 2 word expansion
+			
+			NONCE_BLOCK_2_WAIT: begin
+				w[15] <= mem_read_data;
+				mem_addr <= message_addr + readOffset;
+				readOffset <= readOffset + 7'b1;
+				state <= BLOCK2_WORD_EXP;
+			end
+			
+			BLOCK2_WORD_EXP: begin // Block 2 word expansion; first 16
+				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, w[15], tIndex);
+				
+				if(tIndex < 8'd2) w[15] <= mem_read_data;
+				if(tIndex == 8'd2) w[15] <= nonceIndex;
+				if(tIndex == 8'd3) w[15] <= 'h80000000;
+				if(tIndex > 8'd3) w[15] <= 'd0;
+				if(tIndex == 8'd14) w[15] <= 'h280;
+				
+				for(i=0; i < 15; i++) w[i] <= w[i+1];
+				mem_addr <= message_addr + readOffset;
+				readOffset <= readOffset + 7'b1;
+				tIndex <= tIndex+8'b1;
+
+				if(tIndex == 15) begin
+					w[15] <= wtnew();
+					state <= HASH2_INIT; //next loop
+				end
 				
 			end
-			HASH2_INIT: begin // Init 2nd hash nonce calcs
+			
+			HASH2_INIT: begin // Init 2nd hash nonce calcs, next 48
+				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, w[15], tIndex);
+				w[15] <= wtnew();
+				for(i=0; i < 15; i++) w[i] <= w[i+1]; // doesnt match slides; moved before read line
+				mem_addr <= message_addr + readOffset;
+				readOffset <= readOffset + 7'b1;
+				tIndex <= tIndex+8'b1;
+				
+				if( tIndex == 63 ) state <= AFTER_NONCE;
+			end
+			
+			START_BLOCK_3: begin
+				w[15] <= h0[nonceIndex];
+				tIndex <= tIndex + 7'b1;
+				state <= STALL_BLOCK_3;
+			end
+			
+			STALL_BLOCK_3: begin
+				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, w[15], tIndex);
+				w[15] <= h1[nonceIndex];
+				for(i=0; i < 15; i++) w[i] <= w[i+1];
+				tIndex <= tIndex + 7'b1;
+				state <= EXP_BLOCK_3;
+			end
+			
+			EXP_BLOCK_3: begin
+				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, w[15], tIndex);
+				if(tIndex == 7'd2) w[15] <= h2[nonceIndex];
+				if(tIndex == 7'd3) w[15] <= h3[nonceIndex];
+				if(tIndex == 7'd4) w[15] <= h4[nonceIndex];
+				if(tIndex == 7'd5) w[15] <= h5[nonceIndex];
+				if(tIndex == 7'd6) w[15] <= h6[nonceIndex];
+				if(tIndex == 7'd7) w[15] <= h7[nonceIndex];
+				if(tIndex == 7'd8) w[15] <= 'h80000000;
+				if(tIndex < 7'd14 && tIndex > 7'd8) w[15] <= 'h0;
+				if(tIndex == 7'd14) w[15] <= 'h280;
+				
+				for(i=0; i < 15; i++) w[i] <= w[i+1];
+				mem_addr <= message_addr + readOffset;
+				readOffset <= readOffset + 7'b1;
+				tIndex <= tIndex+8'b1;
+				
+				if(tIndex == 15) begin
+					w[15] <= wtnew();
+					state <= HASH_BLOCK_3; //next loop
+				end
 			
 			end
-			HASH2_WORD_EXP: begin // 2nd hash word expansion
-				
+			
+			WAIT_BLOCK_3: begin
+			
 			end
+			
+			HASH_BLOCK_3: begin
+				state<= DONE;
+			end
+			
+			
 			AFTER_NONCE: begin
 				// final hash vals
 				h0[nonceIndex] <= h0[nonceIndex] + a;
@@ -240,15 +354,18 @@ always @(posedge clk, negedge reset_n) begin
 				h7[nonceIndex] <= h7[nonceIndex] + h;
 
 				nonceIndex <= nonceIndex+7'b1; 	// n++
-
-				if ( nonceIndex == 15 ) begin // is nonce loop done
-					if (!b2Done) begin
+				
+				if(nonceIndex < 'd15)begin
+					tIndex <= 7'b0;
+					readOffset <= 7'd16;
+					state <= BEFORE_NONCE;
+				end else state <= DONE;
+				
+				/*if ( nonceIndex == 15 && !b2Done ) begin // is nonce loop done
 						b2Done <= !b2Done;
-					end
-					else begin
-						state <= HO_WRITE; // TODO: Add H0_WRITE
-					end
-				end
+						state <= START_BLOCK_3;
+						tIndex <= 7'b0;
+				end*/ //else state <= DONE; // TODO: Add H0_WRITE
 			end	
 			DONE: begin
 				done = 1'b1;
