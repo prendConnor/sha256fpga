@@ -72,7 +72,7 @@ enum logic [4:0] {IDLE=5'b00000, PRIME_ADDR=5'b00001, FIRST_READ=5'b00010, FIRST
 						NONCE=5'b01000, AFTER_NONCE=5'b01001, WRITE=5'b01010, DONE = 5'b01111,
 						BLOCK2_INIT=5'b11111,BLOCK2_WORD_EXP=5'b10000,HASH2_INIT=5'b10001,HASH2_WORD_EXP=5'b10010,
 						NONCE_BLOCK_2_WAIT=5'b10011, START_BLOCK_3=5'b10100, STALL_BLOCK_3=5'b10101, 
-						EXP_BLOCK_3=5'b10110, WAIT_BLOCK_3=5'b10111, HASH_BLOCK_3=5'b11000, WAIT_AFTER_HASH=5'b11001} state;
+						EXP_BLOCK_3=5'b10110, HASH_BLOCK_3=5'b11000} state;
 
 
 
@@ -162,6 +162,13 @@ always @(posedge clk, negedge reset_n) begin
 				state <= WAIT;
 			end
 			
+			WAIT: begin
+				w[15] <= mem_read_data;
+				mem_addr <= message_addr + readOffset;
+				readOffset <= readOffset + 7'b1;
+				state <= FIRST_16;
+			end
+			
 			FIRST_16: begin
 				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, w[15], tIndex);
 				w[15] <= mem_read_data;
@@ -189,13 +196,6 @@ always @(posedge clk, negedge reset_n) begin
 					readOffset <= 7'd16;
 				end
 			
-			end
-			
-			WAIT: begin
-				w[15] <= mem_read_data;
-				mem_addr <= message_addr + readOffset;
-				readOffset <= readOffset + 7'b1;
-				state <= FIRST_16;
 			end
 			
 			FINALIZE_HASH: begin
@@ -324,8 +324,6 @@ always @(posedge clk, negedge reset_n) begin
 				if(tIndex == 7'd14) w[15] <= 'd256;
 				
 				for(i=0; i < 15; i++) w[i] <= w[i+1];
-				mem_addr <= message_addr + readOffset;
-				readOffset <= readOffset + 7'b1;
 				tIndex <= tIndex+8'b1;
 				
 				if(tIndex == 15) begin
@@ -335,24 +333,14 @@ always @(posedge clk, negedge reset_n) begin
 			
 			end
 			
-			/*WAIT_BLOCK_3: begin
-				state <= START_BLOCK_3;
-			end*/
-			
 			HASH_BLOCK_3: begin
 				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, w[15], tIndex);
 				w[15] <= wtnew();
 				for(i=0; i < 15; i++) w[i] <= w[i+1]; // doesnt match slides; moved before read line
-				mem_addr <= message_addr + readOffset;
-				readOffset <= readOffset + 7'b1;
 				tIndex <= tIndex+8'b1;
 				
 				if( tIndex == 63 ) state <= AFTER_NONCE;
 			end
-			
-			/**WAIT_AFTER_HASH: begin
-				state<=AFTER_NONCE;
-			end**/
 			
 			AFTER_NONCE: begin
 				// final hash vals
@@ -405,8 +393,7 @@ always @(posedge clk, negedge reset_n) begin
 					h <= 32'h5be0cd19;
 
 					nonceIndex <= 7'b0;
-					//state <= WAIT_BLOCK_3;
-					state = START_BLOCK_3;
+					state <= START_BLOCK_3;
 					tIndex <= 7'b0;
 				end
 				
