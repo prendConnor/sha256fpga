@@ -41,7 +41,7 @@ logic	[6:0]	nonceIndex;		// which nonce are we on
 logic			b2Done;
 logic	[31:0] w[16];			// 16 elelment word array
 logic	[4:0] i;					// index for for loop
-logic [31:0] w_15, w_14, w_13, h0_naught, h0_one, h0_two, h0_3, h0_4, h0_5, h0_6, h0_7, h0_8, h0_9, h0_10;
+/*logic [31:0] w_15, w_14, w_13, h0_naught, h0_one, h0_two, h0_3, h0_4, h0_5, h0_6, h0_7, h0_8, h0_9, h0_10;
 logic [31:0] h0_11, h0_12, h0_13, h0_14, h0_15;
 
 assign w_15 = w[15];
@@ -62,9 +62,7 @@ assign h0_11 = h0[11];
 assign h0_12 = h0[12];
 assign h0_13 = h0[13];
 assign h0_14 = h0[14];
-assign h0_15 = h0[15];
-
-//logic   [31:0] s1, s0;
+assign h0_15 = h0[15];*/
 
 //states
 enum logic [4:0] {IDLE=5'b00000, PRIME_ADDR=5'b00001, FIRST_READ=5'b00010, FIRST_16=5'b00011, 
@@ -72,7 +70,7 @@ enum logic [4:0] {IDLE=5'b00000, PRIME_ADDR=5'b00001, FIRST_READ=5'b00010, FIRST
 						NONCE=5'b01000, AFTER_NONCE=5'b01001, WRITE=5'b01010, DONE = 5'b01111,
 						BLOCK2_INIT=5'b11111,BLOCK2_WORD_EXP=5'b10000,HASH2_INIT=5'b10001,HASH2_WORD_EXP=5'b10010,
 						NONCE_BLOCK_2_WAIT=5'b10011, START_BLOCK_3=5'b10100, STALL_BLOCK_3=5'b10101, 
-						EXP_BLOCK_3=5'b10110, HASH_BLOCK_3=5'b11000} state;
+						EXP_BLOCK_3=5'b10110, HASH_BLOCK_3=5'b11000, AFTER_BLOCK_3=5'b11001, WRITE_NONCES = 5'b11010} state;
 
 
 
@@ -355,6 +353,10 @@ always @(posedge clk, negedge reset_n) begin
 
 				nonceIndex <= nonceIndex+7'b1; 	// n++
 				
+				if(b2Done) begin
+					state <= AFTER_BLOCK_3;
+				end
+				
 				if(nonceIndex < 'd15 && !b2Done)begin
 					tIndex <= 7'b0;
 					readOffset <= 7'd16;
@@ -396,10 +398,11 @@ always @(posedge clk, negedge reset_n) begin
 					state <= START_BLOCK_3;
 					tIndex <= 7'b0;
 				end
+			end
 				
-				if(nonceIndex < 'd15 && b2Done) begin
-					
-					/*w[7] <= h0[nonceIndex];
+			AFTER_BLOCK_3: begin
+				if(nonceIndex < 'd16 && b2Done) begin
+					w[7] <= h0[nonceIndex];
 					w[8] <= h1[nonceIndex];
 					w[9] <= h2[nonceIndex];
 					w[10] <= h3[nonceIndex];
@@ -427,15 +430,32 @@ always @(posedge clk, negedge reset_n) begin
 					g <= 32'h1f83d9ab;
 					h <= 32'h5be0cd19;
 					
-					state <= WAIT_BLOCK_3;
-					tIndex <= 7'b0;*/
-					state <= DONE;
+					state <= START_BLOCK_3;
+					tIndex <= 7'b0;
 				end
 				
-				if(nonceIndex == 'd15 && b2Done)
-					state <= DONE;
+				if(nonceIndex == 'd16) begin
+					mem_addr <= output_addr + writeOffset;
+					state <= WRITE_NONCES;
+				end
 				
-			end	
+			end
+			
+			WRITE_NONCES: begin
+				begin
+					mem_we = 1'b1;
+					mem_write_data <= h0[0];
+					for(i=0; i < 15; i++) h0[i] <= h0[i+1];
+					mem_addr <= output_addr + writeOffset;
+					
+					if(writeOffset < 8'd16)
+						writeOffset = writeOffset + 7'b1;
+					else
+						state <= DONE;
+				end		
+			end
+						
+			
 			DONE: begin
 				done = 1'b1;
 			end

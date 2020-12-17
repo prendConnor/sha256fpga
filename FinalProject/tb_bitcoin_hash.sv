@@ -240,8 +240,8 @@ begin
 
 // 3. COMPUTE SECOND HASH FOR EACH NONCE
 
-    //for (n = 0; n < NUM_NONCES; n++) begin
-	 for (n = 0; n < 1; n++) begin
+    for (n = 0; n < NUM_NONCES; n++) begin
+	 //for (n = 0; n < 1; n++) begin
 
         // WORD EXPANSION
 
