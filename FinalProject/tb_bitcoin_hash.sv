@@ -241,7 +241,7 @@ begin
 // 3. COMPUTE SECOND HASH FOR EACH NONCE
 
     //for (n = 0; n < NUM_NONCES; n++) begin
-	 /*for (n = 0; n < 1; n++) begin
+	 for (n = 0; n < 1; n++) begin
 
         // WORD EXPANSION
 
@@ -290,7 +290,7 @@ begin
         for (t = 0; t < 64; t++) begin
 		  		  	$display("this is t: %d", t);
 					$display("this is n: %d", n);
-					$display("this is w[14]: %x", w[14]);
+					$display("this is w[t]: %x", w[t]);
 					$display("this is a: %x", a);
 					$display("this is b: %x", b);
 					$display("this is c: %x", c);
@@ -303,7 +303,8 @@ begin
         end
 
         // FINAL HASH FOR SECOND HASH
-
+		  $display("this is h0[n]: %x", h0[n]);
+		  $display("this is a: %x", a);
         h0[n] = h0[n] + a;
         h1[n] = h1[n] + b;
         h2[n] = h2[n] + c;
@@ -312,7 +313,7 @@ begin
         h5[n] = h5[n] + f;
         h6[n] = h6[n] + g;
         h7[n] = h7[n] + h;
-    end*/
+    end
 
 // WAIT UNTIL EVERY IS DONE, THEN DISPLAY HASH RESULTS
 

@@ -34,7 +34,6 @@ logic	[31:0] h5[NUM_NONCES];
 logic	[31:0] h6[NUM_NONCES];
 logic	[31:0] h7[NUM_NONCES];
 
-logic	[6:0]	wIndex; 			// index for accessing word array
 logic	[7:0]	tIndex;			// index to track number of expand iters
 logic	[6:0]	readOffset;		// value to track read addr offset
 logic	[6:0]	writeOffset;	// value to track write addr offset
@@ -73,7 +72,7 @@ enum logic [4:0] {IDLE=5'b00000, PRIME_ADDR=5'b00001, FIRST_READ=5'b00010, FIRST
 						NONCE=5'b01000, AFTER_NONCE=5'b01001, WRITE=5'b01010, DONE = 5'b01111,
 						BLOCK2_INIT=5'b11111,BLOCK2_WORD_EXP=5'b10000,HASH2_INIT=5'b10001,HASH2_WORD_EXP=5'b10010,
 						NONCE_BLOCK_2_WAIT=5'b10011, START_BLOCK_3=5'b10100, STALL_BLOCK_3=5'b10101, 
-						EXP_BLOCK_3=5'b10110, WAIT_BLOCK_3=5'b10111, HASH_BLOCK_3=5'b11000} state;
+						EXP_BLOCK_3=5'b10110, WAIT_BLOCK_3=5'b10111, HASH_BLOCK_3=5'b11000, WAIT_AFTER_HASH=5'b11001} state;
 
 
 
@@ -296,30 +295,33 @@ always @(posedge clk, negedge reset_n) begin
 			end
 			
 			START_BLOCK_3: begin
-				w[15] <= h0[nonceIndex];
-				tIndex <= tIndex + 7'b1;
+				if(tIndex == 8'd0) w[15] <= w[7];
+				if(tIndex == 8'd1) w[15] <= w[8];
+				if(tIndex == 8'd2) w[15] <= w[9];
+				if(tIndex == 8'd3) w[15] <= w[10];
+				if(tIndex == 8'd4) w[15] <= w[11];
+				if(tIndex == 8'd5) w[15] <= w[12];
+				if(tIndex == 8'd6) w[15] <= w[13];
+				if(tIndex == 8'd7) w[15] <= w[14];
 				state <= STALL_BLOCK_3;
 			end
 			
 			STALL_BLOCK_3: begin
 				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, w[15], tIndex);
-				w[15] <= h1[nonceIndex];
-				for(i=0; i < 15; i++) w[i] <= w[i+1];
-				tIndex <= tIndex + 7'b1;
-				state <= EXP_BLOCK_3;
+				
+				tIndex = tIndex + 7'b1;
+				
+				if(tIndex == 7'd8) begin
+					w[15] <= 'h80000000;
+					state <= EXP_BLOCK_3;
+				 end else
+					state <= START_BLOCK_3;
 			end
 			
 			EXP_BLOCK_3: begin
 				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, w[15], tIndex);
-				if(tIndex == 7'd2) w[15] <= h2[nonceIndex];
-				if(tIndex == 7'd3) w[15] <= h3[nonceIndex];
-				if(tIndex == 7'd4) w[15] <= h4[nonceIndex];
-				if(tIndex == 7'd5) w[15] <= h5[nonceIndex];
-				if(tIndex == 7'd6) w[15] <= h6[nonceIndex];
-				if(tIndex == 7'd7) w[15] <= h7[nonceIndex];
-				if(tIndex == 7'd8) w[15] <= 'h80000000;
-				if(tIndex < 7'd14 && tIndex > 7'd8) w[15] <= 'h0;
-				if(tIndex == 7'd14) w[15] <= 'h280;
+				if(tIndex < 7'd14 && tIndex > 7'd7) w[15] <= 'h0;
+				if(tIndex == 7'd14) w[15] <= 'd256;
 				
 				for(i=0; i < 15; i++) w[i] <= w[i+1];
 				mem_addr <= message_addr + readOffset;
@@ -328,19 +330,29 @@ always @(posedge clk, negedge reset_n) begin
 				
 				if(tIndex == 15) begin
 					w[15] <= wtnew();
-					state <= HASH_BLOCK_3; //next loop
+					state <= HASH_BLOCK_3;
 				end
 			
 			end
 			
-			WAIT_BLOCK_3: begin
-			
-			end
+			/*WAIT_BLOCK_3: begin
+				state <= START_BLOCK_3;
+			end*/
 			
 			HASH_BLOCK_3: begin
-				state<= DONE;
+				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, w[15], tIndex);
+				w[15] <= wtnew();
+				for(i=0; i < 15; i++) w[i] <= w[i+1]; // doesnt match slides; moved before read line
+				mem_addr <= message_addr + readOffset;
+				readOffset <= readOffset + 7'b1;
+				tIndex <= tIndex+8'b1;
+				
+				if( tIndex == 63 ) state <= AFTER_NONCE;
 			end
 			
+			/**WAIT_AFTER_HASH: begin
+				state<=AFTER_NONCE;
+			end**/
 			
 			AFTER_NONCE: begin
 				// final hash vals
@@ -355,17 +367,87 @@ always @(posedge clk, negedge reset_n) begin
 
 				nonceIndex <= nonceIndex+7'b1; 	// n++
 				
-				if(nonceIndex < 'd15)begin
+				if(nonceIndex < 'd15 && !b2Done)begin
 					tIndex <= 7'b0;
 					readOffset <= 7'd16;
 					state <= BEFORE_NONCE;
-				end else state <= DONE;
+				end
 				
-				/*if ( nonceIndex == 15 && !b2Done ) begin // is nonce loop done
-						b2Done <= !b2Done;
-						state <= START_BLOCK_3;
-						tIndex <= 7'b0;
-				end*/ //else state <= DONE; // TODO: Add H0_WRITE
+				if ( nonceIndex == 'd15 && !b2Done ) begin // is nonce loop done
+					b2Done <= 1'b1;
+
+					w[7] <= h0[0];
+					w[8] <= h1[0];
+					w[9] <= h2[0];
+					w[10] <= h3[0];
+					w[11] <= h4[0];
+					w[12] <= h5[0];
+					w[13] <= h6[0];
+					w[14] <= h7[0];
+					w[15] <= h0[0];
+
+					h0[0] <= 32'h6a09e667;
+					h1[0] <= 32'hbb67ae85;
+					h2[0] <= 32'h3c6ef372;
+					h3[0] <= 32'ha54ff53a;
+					h4[0] <= 32'h510e527f;
+					h5[0] <= 32'h9b05688c;
+					h6[0] <= 32'h1f83d9ab;
+					h7[0] <= 32'h5be0cd19;
+
+					a <= 32'h6a09e667;
+					b <= 32'hbb67ae85;
+					c <= 32'h3c6ef372;
+					d <= 32'ha54ff53a;
+					e <= 32'h510e527f;
+					f <= 32'h9b05688c;
+					g <= 32'h1f83d9ab;
+					h <= 32'h5be0cd19;
+
+					nonceIndex <= 7'b0;
+					//state <= WAIT_BLOCK_3;
+					state = START_BLOCK_3;
+					tIndex <= 7'b0;
+				end
+				
+				if(nonceIndex < 'd15 && b2Done) begin
+					
+					/*w[7] <= h0[nonceIndex];
+					w[8] <= h1[nonceIndex];
+					w[9] <= h2[nonceIndex];
+					w[10] <= h3[nonceIndex];
+					w[11] <= h4[nonceIndex];
+					w[12] <= h5[nonceIndex];
+					w[13] <= h6[nonceIndex];
+					w[14] <= h7[nonceIndex];
+					w[15] <= h0[nonceIndex];
+
+					h0[nonceIndex] <= 32'h6a09e667;
+					h1[nonceIndex] <= 32'hbb67ae85;
+					h2[nonceIndex] <= 32'h3c6ef372;
+					h3[nonceIndex] <= 32'ha54ff53a;
+					h4[nonceIndex] <= 32'h510e527f;
+					h5[nonceIndex] <= 32'h9b05688c;
+					h6[nonceIndex] <= 32'h1f83d9ab;
+					h7[nonceIndex] <= 32'h5be0cd19;
+
+					a <= 32'h6a09e667;
+					b <= 32'hbb67ae85;
+					c <= 32'h3c6ef372;
+					d <= 32'ha54ff53a;
+					e <= 32'h510e527f;
+					f <= 32'h9b05688c;
+					g <= 32'h1f83d9ab;
+					h <= 32'h5be0cd19;
+					
+					state <= WAIT_BLOCK_3;
+					tIndex <= 7'b0;*/
+					state <= DONE;
+				end
+				
+				if(nonceIndex == 'd15 && b2Done)
+					state <= DONE;
+				
 			end	
 			DONE: begin
 				done = 1'b1;
